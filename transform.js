@@ -1,9 +1,19 @@
 function makeAsync(j, path) {
-  path.node.async = true;
-  path.node.params = [];
-
   // processEnd(j, path);
-  processThen(j, path);
+  if (processThen(j, path)) {
+    path.node.async = true;
+
+    // Special-case running in a Mocha/Jest test declaration, removing the
+    // `done` parameter
+    let parent = path.parentPath.node;
+    if (parent.type !== 'CallExpression') {
+      return;
+    }
+    if (parent.callee.name !== 'it') {
+      return;
+    }
+    path.node.params = [];
+  }
 }
 
 /**
@@ -40,6 +50,7 @@ function processEnd(j, path) {
 function processThen(j, path) {
   let lastPromise = null;
   let paths = [];
+  let anyTransformed = false;
 
 
   // upon seeing a fn, pop off the promise and replace args with const arg = await promise; body
@@ -79,7 +90,10 @@ function processThen(j, path) {
     } else {
       path.node.body.body = newBody.concat(path.node.body.body);
     }
+    anyTransformed = true;
   }
+
+  return anyTransformed;
 }
 
 module.exports = function(file, api) {
@@ -88,14 +102,6 @@ module.exports = function(file, api) {
     .find(j.ArrowFunctionExpression)
     .forEach(path => {
       if (path.node.async) {
-        return;
-      }
-      let parent = path.parentPath.node;
-      if (parent.type !== 'CallExpression') {
-        return;
-      }
-      // Only run in mocha-style test declarations
-      if (parent.callee.name !== 'it') {
         return;
       }
       makeAsync(j, path);
