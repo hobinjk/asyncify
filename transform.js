@@ -93,20 +93,27 @@ function processThen(j, path) {
     anyTransformed = true;
   }
 
+  // TODO: If the promise chain is returned append lastPromise to path.node.body.body
+
   return anyTransformed;
+}
+
+function processCollection(j, collection) {
+  collection.forEach(path => {
+    if (path.node.async) {
+      return;
+    }
+    makeAsync(j, path);
+  });
 }
 
 module.exports = function(file, api) {
   let j = api.jscodeshift;
-  return j(file.source)
-    .find(j.ArrowFunctionExpression)
-    .forEach(path => {
-      if (path.node.async) {
-        return;
-      }
-      makeAsync(j, path);
-    })
-    .toSource();
+  let source = j(file.source)
+  processCollection(j, source.find(j.ArrowFunctionExpression));
+  processCollection(j, source.find(j.FunctionExpression));
+  processCollection(j, source.find(j.FunctionDeclaration));
+  return source.toSource();
 };
 
 module.exports.parser = 'babel';

@@ -34,3 +34,16 @@ it('creates another user', (done) => {
    */
 });
 
+function alone() {
+  return somePromise().then(result => {
+    return result.otherPromise();
+  }).then(nestedResult => {
+    return 12;
+  });
+}
+
+/**
+ * const result = await somePromise();
+ * const nestedResult = await result.otherPromise();
+ * return await result.???
+ */
