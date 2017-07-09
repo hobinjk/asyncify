@@ -6,7 +6,14 @@ function makeAsync(j, path) {
   processThen(j, path);
 }
 
+/**
+ * Convert from `call().end((err, res) => {})` to async/await given that `call()`
+ * returns a promise.
+ * @param j - jscodeshift api instance
+ * @param path - path descriptor
+ */
 function processEnd(j, path) {
+  // Find the .end() call
   j(path).find(j.CallExpression, {
     callee: {
       property: {
@@ -14,6 +21,7 @@ function processEnd(j, path) {
       }
     }
   }).forEach(callPath => {
+    // Replace with const {second argument of end's function} = await call()
     let call = callPath.node;
     let newBody = [
       j.variableDeclaration('const', [j.variableDeclarator(call.arguments[0].params[1], j.awaitExpression(call.callee.object))])
@@ -24,12 +32,17 @@ function processEnd(j, path) {
   });
 }
 
+/**
+ * Convert from `call().then(res => {})` to `const res = await call()`
+ * @param j - jscodeshift api instance
+ * @param path - path descriptor
+ */
 function processThen(j, path) {
   let lastPromise = null;
   let paths = [];
 
 
-  // upon seeing a fn, pop off the promise and replace args with let arg = await promise; body
+  // upon seeing a fn, pop off the promise and replace args with const arg = await promise; body
   j(path).find(j.CallExpression, {
     callee: {
       property: {
@@ -56,24 +69,19 @@ function processThen(j, path) {
 
     if (callBody[callBody.length - 1].type === 'ReturnStatement') {
       lastPromise = callBody.pop().argument;
-      // newBody.push(
-      //   j.variableDeclaration('const', [j.variableDeclarator(call.arguments[0].params[0], ret.argument)])
-      // );
     }
 
     newBody = newBody.concat(call.arguments[0].body.body);
 
     let statementIndex = path.node.body.body.indexOf(callPath.parentPath.node);
-    console.log(statementIndex);
     if (statementIndex >= 0) {
       path.node.body.body.splice(statementIndex, 1, ...newBody);
     } else {
       path.node.body.body = newBody.concat(path.node.body.body);
     }
-
-    console.log(j(path).toSource());
   }
 }
+
 module.exports = function(file, api) {
   let j = api.jscodeshift;
   return j(file.source)
@@ -86,6 +94,7 @@ module.exports = function(file, api) {
       if (parent.type !== 'CallExpression') {
         return;
       }
+      // Only run in mocha-style test declarations
       if (parent.callee.name !== 'it') {
         return;
       }
